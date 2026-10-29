@@ -48,7 +48,7 @@ jobs:
           docker buildx build --platform linux/arm64 -f rootfs/Dockerfile \
             --output type=tar,dest="$RUNNER_TEMP/rootfs.tar" .
           mkdir -p android/app/src/main/assets
-          gzip -9 -c "$RUNNER_TEMP/rootfs.tar" > android/app/src/main/assets/rootfs.tar.gz
+          gzip -9 -c "$RUNNER_TEMP/rootfs.tar" > android/app/src/main/assets/rootfs.dat
           ls -l android/app/src/main/assets
 
       - name: Get proot for Android
@@ -78,7 +78,7 @@ jobs:
       - name: Check the APK really contains the Linux and proot
         run: |
           unzip -l mobile/android/app/build/outputs/apk/debug/app-debug.apk | grep -E "assets/rootfs|lib/arm64-v8a/libproot"
-          unzip -l mobile/android/app/build/outputs/apk/debug/app-debug.apk | grep -q "assets/rootfs.tar.gz"
+          unzip -l mobile/android/app/build/outputs/apk/debug/app-debug.apk | grep -q "assets/rootfs.dat"
           unzip -l mobile/android/app/build/outputs/apk/debug/app-debug.apk | grep -q "lib/arm64-v8a/libproot.so"
 
       - uses: actions/upload-artifact@v4
@@ -86,3 +86,4 @@ jobs:
           name: nami-android-apk
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          
