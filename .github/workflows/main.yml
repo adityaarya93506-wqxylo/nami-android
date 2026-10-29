@@ -1,0 +1,72 @@
+# Builds the Nami Android app in GitHub's cloud, so no PC is needed.
+# Copy this file to  .github/workflows/nami-android.yml  in your repository
+# (the mobile/ folder must sit at the repository root), then:
+#   GitHub -> Actions -> "Nami Android APK" -> Run workflow
+# It takes a while (the Linux inside the app is built for arm64 under emulation).
+# When it finishes, open the run and download the artifact "nami-android-apk".
+name: Nami Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'mobile/android/**'
+      - 'mobile/rootfs/**'
+      - 'mobile/server/**'
+      - 'mobile/web/**'
+      - 'mobile/tools/fetch-proot.sh'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the parts that can be checked here
+        working-directory: mobile
+        run: |
+          sudo apt-get update && sudo apt-get install -y tmux util-linux dpkg
+          npm install --omit=optional --no-audit --no-fund
+          npm test
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the Linux for the phone (arm64 Alpine + Node + tmux + Nami server)
+        working-directory: mobile
+        run: |
+          docker buildx build --platform linux/arm64 -f rootfs/Dockerfile \
+            --output type=tar,dest="$RUNNER_TEMP/rootfs.tar" .
+          mkdir -p android/app/src/main/assets
+          gzip -9 -c "$RUNNER_TEMP/rootfs.tar" > android/app/src/main/assets/rootfs.tar.gz
+          ls -l android/app/src/main/assets
+
+      - name: Get proot for Android
+        working-directory: mobile
+        run: |
+          sudo apt-get update && sudo apt-get install -y patchelf binutils
+          bash tools/fetch-proot.sh android/app/src/main/jniLibs/arm64-v8a
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build the APK
+        working-directory: mobile/android
+        run: gradle --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nami-android-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
